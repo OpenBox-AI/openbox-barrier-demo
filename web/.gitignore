@@ -1,0 +1,15 @@
+/node_modules
+/coverage
+/.next/
+/.vinext/
+/out/
+.DS_Store
+*.pem
+*.log
+.env*
+.vercel
+next-env.d.ts
+/dist/
+/.wrangler/
+/outputs/
+/work/
