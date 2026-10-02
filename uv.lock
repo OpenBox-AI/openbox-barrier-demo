@@ -817,7 +817,7 @@ requires-dist = [
     { name = "langchain-core", specifier = ">=1.3.3" },
     { name = "langchain-openai", specifier = ">=0.3.0" },
     { name = "langgraph", specifier = ">=0.2.0" },
-    { name = "openbox-langgraph-sdk-python", specifier = ">=1.1.0" },
+    { name = "openbox-langgraph-sdk-python", specifier = ">=1.2.0" },
     { name = "openbox-sdk-python", specifier = ">=1.4.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
@@ -843,7 +843,7 @@ wheels = [
 
 [[package]]
 name = "openbox-langgraph-sdk-python"
-version = "1.1.0"
+version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -867,9 +867,9 @@ dependencies = [
     { name = "opentelemetry-instrumentation-urllib3" },
     { name = "opentelemetry-sdk" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8b/d9/e6f10d68d0a93ed7f5a8ec5d7d65809a1f84431c0559e24ed8d3a675ca7f/openbox_langgraph_sdk_python-1.1.0.tar.gz", hash = "sha256:d0b8803c391dc2712568b8f610109f59c10f527b1b9334c8ae76ec0699ebb5d2", size = 464387, upload-time = "2026-10-01T20:40:41.889Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/17/30/f49ea7c3da143bbb3856feb4b89ad28320665d71febcc2f2d8aaa02aa8ff/openbox_langgraph_sdk_python-1.2.0.tar.gz", hash = "sha256:25acf0901005b42b0ed05f19526e588738b9287607d6c05db45951155e9a1c48", size = 463856, upload-time = "2026-10-02T10:39:31.745Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a9/15/afa8defd42a8d6212897b0fd8fe521cacc72bf8702d81545251247c3fdb7/openbox_langgraph_sdk_python-1.1.0-py3-none-any.whl", hash = "sha256:27e06e7fa4e2198fec38c90b06dd0ef85346603f2d0a49050ad689991204000c", size = 91183, upload-time = "2026-10-01T20:40:40.295Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/e7/e0a5501b4b8f0b6a27b0e0df9ac846fd2b13ddfeafbc0627a2c91a8d055e/openbox_langgraph_sdk_python-1.2.0-py3-none-any.whl", hash = "sha256:97679e50be4b5a59a8bd5deab35f53a5e0634e6a682671bc5806c6193839859c", size = 90143, upload-time = "2026-10-02T10:39:30.173Z" },
 ]
 
 [[package]]
