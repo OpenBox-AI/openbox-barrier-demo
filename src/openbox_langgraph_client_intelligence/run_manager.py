@@ -37,6 +37,8 @@ _ALLOWED_EVENT_TYPES = frozenset(
         "upload_blocked",
         "upload_completed",
         "upload_failed",
+        "approval_requested",
+        "approval_granted",
         "workflow_completed",
         "workflow_blocked",
         "workflow_failed",
@@ -338,6 +340,10 @@ class WorkflowRunManager:
                 ]
                 record.filing_results.append(filing_result)
                 record.filing_results.sort(key=lambda item: int(item.get("attempt_number", 0)))
+        elif event_type == "approval_requested":
+            record.status, record.current_step = "awaiting_approval", "Requires approval"
+        elif event_type == "approval_granted":
+            record.status, record.current_step = "running", "Resuming"
         elif event_type == "workflow_completed":
             final_status = str(data.get("final_status", "completed"))
             record.status = (

@@ -19,6 +19,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
+from .approvals import ApprovalTracker, observe_approval_waits
 from .config import AgentSettings
 from .events import JsonEventWriter
 from .governance import build_governed_agent
@@ -57,10 +58,22 @@ async def run_agent(
             settings.filed_documents_dir,
         )
         openbox_evaluations = OpenBoxEvaluationRecorder()
+        approvals = ApprovalTracker(_approval_reporter(profile.display_name, event_writer))
+        observe_approval_waits(approvals)
+
+        def record_governance_failure(tool_call_id: str, error: BaseException) -> None:
+            openbox_evaluations.record_exception(tool_call_id, error)
+            approvals.record_request(error)
+
+        def emit_workflow_event(event_type: str, data: dict) -> None:
+            approvals.observe(event_type, data)
+            if event_writer:
+                event_writer.emit(event_type, data)
+
         tools = build_document_tools(
             repository,
             agent_slug=profile.slug,
-            governance_failure_sink=openbox_evaluations.record_exception,
+            governance_failure_sink=record_governance_failure,
         )
         model = ChatOpenAI(
             model=settings.openai_model,
@@ -71,7 +84,7 @@ async def run_agent(
             profile,
             tools,
             model,
-            event_sink=event_writer.emit if event_writer else None,
+            event_sink=emit_workflow_event,
             governance_reason_lookup=openbox_evaluations.reason_for,
             governance_evaluation_lookup=openbox_evaluations.evaluation_for,
         )
@@ -191,6 +204,20 @@ async def run_agent(
                 f"{blocked} blocked · {committed} committed"
             )
     return 0
+
+
+def _approval_reporter(display_name: str, event_writer: JsonEventWriter | None):
+    """Send approval waits to the web UI, or print them when run from the terminal."""
+
+    def report(event_type: str, data: dict) -> None:
+        if event_writer:
+            event_writer.emit(event_type, data)
+        elif event_type == "approval_requested":
+            console.print(f"[cyan]{display_name} requires approval in OpenBox:[/] {data['reason']}")
+        else:
+            console.print(f"[green]Approved.[/] {display_name}'s run continues.")
+
+    return report
 
 
 def _parser() -> argparse.ArgumentParser:
