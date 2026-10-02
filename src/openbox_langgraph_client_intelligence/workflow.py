@@ -15,7 +15,13 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
-from openbox_langgraph import GovernanceBlockedError
+from openbox_langgraph import (
+    ApprovalExpiredError,
+    ApprovalRejectedError,
+    ApprovalTimeoutError,
+    GovernanceBlockedError,
+    GovernanceHaltError,
+)
 
 from .profiles import AgentProfile
 from .tools import DocumentTools
@@ -29,6 +35,12 @@ _GOVERNANCE_ERROR_NAMES = (
     "ApprovalRejectedError",
     "ApprovalExpiredError",
     "ApprovalTimeoutError",
+)
+_TERMINAL_GOVERNANCE_ERRORS = (
+    GovernanceHaltError,
+    ApprovalRejectedError,
+    ApprovalExpiredError,
+    ApprovalTimeoutError,
 )
 _TOOL_ERROR_SUFFIX = re.compile(r"\s+Please fix your mistakes\.\s*$", re.IGNORECASE)
 _GOVERNANCE_REASON = re.compile(
@@ -57,6 +69,30 @@ class ResearchState(TypedDict, total=False):
     current_filing: dict[str, Any]
     filing_results: list[dict[str, Any]]
     filing_outcome: str | None
+
+
+def _handle_research_tool_error(error: Exception) -> str:
+    """Keep unavailable-source handling without swallowing SDK control flow."""
+
+    # Error telemetry can wrap the original governance error in an API error.
+    cause: BaseException | None = error
+    seen: set[int] = set()
+    while cause is not None and id(cause) not in seen:
+        seen.add(id(cause))
+        if isinstance(cause, _TERMINAL_GOVERNANCE_ERRORS):
+            raise cause
+        if isinstance(cause, GovernanceBlockedError) and cause.verdict != "block":
+            raise cause
+        cause = cause.__cause__ or cause.__context__
+    return f"Error: {error!r}\n Please fix your mistakes."
+
+
+def _handle_upload_tool_error(error: Exception) -> str:
+    """Only an ordinary BLOCK may advance the client-folder sweep."""
+
+    if not isinstance(error, GovernanceBlockedError) or error.verdict != "block":
+        raise error
+    return _handle_research_tool_error(error)
 
 
 def initial_state(profile: AgentProfile) -> ResearchState:
@@ -89,12 +125,12 @@ def build_research_graph(
 ):
     """Compile one normal research graph; authorization remains external."""
 
-    search_node = ToolNode([tools.search_documents], handle_tool_errors=True)
-    read_node = ToolNode([tools.read_document], handle_tool_errors=True)
-    write_node = ToolNode([tools.write_briefing], handle_tool_errors=True)
+    search_node = ToolNode([tools.search_documents], handle_tool_errors=_handle_research_tool_error)
+    read_node = ToolNode([tools.read_document], handle_tool_errors=_handle_research_tool_error)
+    write_node = ToolNode([tools.write_briefing], handle_tool_errors=_handle_research_tool_error)
     upload_node = ToolNode(
         [tools.upload_document],
-        handle_tool_errors=GovernanceBlockedError,
+        handle_tool_errors=_handle_upload_tool_error,
     )
 
     def lead_event(state: ResearchState, **data: Any) -> dict[str, Any]:

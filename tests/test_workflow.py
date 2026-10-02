@@ -4,11 +4,18 @@ import asyncio
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, ToolMessage
 from openbox_core.errors import GovernanceAPIError
-from openbox_langgraph import GovernanceBlockedError, GovernanceHaltError
+from openbox_langgraph import (
+    ApprovalExpiredError,
+    ApprovalRejectedError,
+    ApprovalTimeoutError,
+    GovernanceBlockedError,
+    GovernanceHaltError,
+)
 
 from openbox_langgraph_client_intelligence.governance_reasons import (
     OpenBoxEvaluationRecorder,
@@ -79,7 +86,93 @@ class MaskGovernanceErrorCallback(BaseCallbackHandler):
         raise GovernanceAPIError("Governance API error: HTTP 400") from error
 
 
+class StopToolCallback(BaseCallbackHandler):
+    raise_error = True
+    run_inline = True
+
+    def __init__(self, tool_name: str, error: Exception) -> None:
+        self.tool_name = tool_name
+        self.error = error
+
+    def on_tool_start(self, serialized, input_str, **kwargs) -> None:
+        if serialized.get("name") == self.tool_name:
+            raise self.error
+
+
 class WorkflowTests(unittest.TestCase):
+    def test_governance_control_errors_escape_every_tool_node(self) -> None:
+        stages = {
+            "search_documents": "search_started",
+            "read_document": "read_started",
+            "write_briefing": "write_started",
+            "upload_document": "upload_started",
+        }
+        for tool_name, last_event in stages.items():
+            failures = (
+                GovernanceBlockedError("require_approval", "Approval pending", "activity-1"),
+                GovernanceBlockedError("halt", "Hook halted", "activity-1"),
+                GovernanceHaltError("Workflow halted"),
+                ApprovalRejectedError("Approval rejected"),
+                ApprovalExpiredError("Approval expired"),
+                ApprovalTimeoutError(1000),
+            )
+            for failure in failures:
+                with self.subTest(tool=tool_name, error=repr(failure)):
+                    with tempfile.TemporaryDirectory() as temp_dir:
+                        root = Path(temp_dir)
+                        library = root / "library"
+                        library.mkdir()
+                        _populate_library(library)
+                        repository = DocumentRepository(library, root / "output", root / "filed")
+                        profile = get_profile("amy")
+                        events: list[str] = []
+                        graph = build_research_graph(
+                            profile,
+                            build_document_tools(repository, agent_slug="amy"),
+                            StubModel(),
+                            event_sink=lambda event_type, data, target=events: target.append(
+                                event_type
+                            ),
+                        )
+
+                        with self.assertRaises(type(failure)) as raised:
+                            asyncio.run(
+                                graph.ainvoke(
+                                    initial_state(profile),
+                                    config={"callbacks": [StopToolCallback(tool_name, failure)]},
+                                )
+                            )
+
+                        self.assertIs(raised.exception, failure)
+                        self.assertEqual(events[-1], last_event)
+                        self.assertEqual(list((root / "filed").rglob("*.md")), [])
+
+    def test_wrapped_approval_error_still_escapes_the_read_node(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            library = root / "library"
+            library.mkdir()
+            _populate_library(library)
+            repository = DocumentRepository(library, root / "output", root / "filed")
+            profile = get_profile("amy")
+            model = StubModel()
+            graph = build_research_graph(
+                profile, build_document_tools(repository, agent_slug="amy"), model
+            )
+            failure = GovernanceBlockedError("require_approval", "Approval pending", "activity-1")
+
+            with patch.object(repository, "read", side_effect=failure):
+                with self.assertRaises(GovernanceBlockedError) as raised:
+                    asyncio.run(
+                        graph.ainvoke(
+                            initial_state(profile),
+                            config={"callbacks": [MaskGovernanceErrorCallback()]},
+                        )
+                    )
+
+            self.assertIs(raised.exception, failure)
+            self.assertEqual(model.last_messages, [])
+
     def test_related_source_failure_does_not_leak_content_or_stop_report(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

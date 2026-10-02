@@ -58,6 +58,9 @@ metadata search -> governed read -> returned evidence
 - An ordinary OpenBox `BLOCK` on any filing attempt is recorded and the client-folder
   sweep continues without inspecting a provider-specific reason or metadata flag. The
   dashboard displays the complete evaluate response for each attempt.
+- `REQUIRE_APPROVAL` reaches the SDK's approval wait without advancing to the next
+  action. The SDK owns polling and resumes the pending operation; pending approval is never
+  treated as an ordinary blocked attempt.
 - `HALT`, approval failures, API failures, invalid destinations, and other operational
   errors retain the SDK's normal terminal behavior.
 - Blocked content and policy reasons never enter the model prompt.
